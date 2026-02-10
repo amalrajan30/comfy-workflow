@@ -10,6 +10,10 @@
     {
       "key": "MODEL_DIR",
       "value": "/runpod-volume/models"
+    },
+    {
+      "key": "HF_TOKEN",
+      "value": ""
     }
   ],
   "minVcpuCount": 4,

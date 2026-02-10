@@ -5,6 +5,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     MODEL_DIR=/runpod-volume/models \
+    HF_HOME=/runpod-volume/huggingface \
     PATH="/root/.local/bin:$PATH"
 
 # System deps
