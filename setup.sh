@@ -2,7 +2,8 @@
 set -e
 
 # ── ComfyUI Pipeline Setup Script ──
-# One-time setup: installs ComfyUI, dependencies, and llama-cpp-python with Metal.
+# One-time setup: installs ComfyUI, dependencies, and llama-cpp-python.
+# Supports Apple Silicon (MPS/Metal) and Linux (CUDA).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMFYUI_DIR="${COMFYUI_DIR:-${SCRIPT_DIR}/ComfyUI}"
@@ -14,23 +15,36 @@ echo " + Qwen2.5-VL GGUF"
 echo "============================================"
 echo ""
 
+# ── Detect platform ──
+OS=$(uname -s)
+ARCH=$(uname -m)
+
+if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
+    PLATFORM="apple_silicon"
+elif [ "$OS" = "Linux" ]; then
+    if command -v nvidia-smi &>/dev/null; then
+        PLATFORM="linux_cuda"
+    else
+        PLATFORM="linux_cpu"
+    fi
+else
+    PLATFORM="other"
+fi
+echo "[OK] Detected platform: ${PLATFORM} (${OS} ${ARCH})"
+
 # ── Check prerequisites ──
+echo ""
 echo "── Checking prerequisites ──"
 
-ARCH=$(uname -m)
-if [ "$ARCH" != "arm64" ]; then
-    echo "WARNING: Expected arm64 (Apple Silicon), got ${ARCH}."
-    echo "         This setup is optimized for Apple Silicon Macs."
+if [ "$OS" = "Darwin" ]; then
+    if ! xcode-select -p &>/dev/null; then
+        echo "[!] Xcode Command Line Tools not found. Installing..."
+        xcode-select --install
+        echo "    Please re-run this script after installation completes."
+        exit 1
+    fi
+    echo "[OK] Xcode Command Line Tools installed"
 fi
-echo "[OK] Architecture: ${ARCH}"
-
-if ! xcode-select -p &>/dev/null; then
-    echo "[!] Xcode Command Line Tools not found. Installing..."
-    xcode-select --install
-    echo "    Please re-run this script after installation completes."
-    exit 1
-fi
-echo "[OK] Xcode Command Line Tools installed"
 
 if ! command -v uv &>/dev/null; then
     echo "[!] uv not found. Installing..."
@@ -70,8 +84,17 @@ fi
 # Install ComfyUI dependencies
 uv pip install -r requirements.txt
 
-# Install PyTorch with MPS support
-uv pip install torch torchvision torchaudio
+# Install PyTorch with appropriate backend
+if [ "$PLATFORM" = "linux_cuda" ]; then
+    echo "Installing PyTorch with CUDA support..."
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+elif [ "$PLATFORM" = "apple_silicon" ]; then
+    echo "Installing PyTorch with MPS support..."
+    uv pip install torch torchvision torchaudio
+else
+    echo "Installing PyTorch (CPU)..."
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+fi
 
 echo ""
 echo "── Installing ComfyUI-GGUF custom node ──"
@@ -102,11 +125,21 @@ cd "$SCRIPT_DIR"
 uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
 
 echo ""
-echo "── Installing llama-cpp-python with Metal ──"
+echo "── Installing llama-cpp-python ──"
 
 # llama-cpp-python for Stage 3 (Qwen2.5-VL GGUF)
-CMAKE_ARGS="-DGGML_METAL=on -DCMAKE_OSX_ARCHITECTURES=arm64" \
+if [ "$PLATFORM" = "apple_silicon" ]; then
+    echo "Building with Metal backend..."
+    CMAKE_ARGS="-DGGML_METAL=on -DCMAKE_OSX_ARCHITECTURES=arm64" \
+        uv pip install --no-cache-dir --force-reinstall llama-cpp-python
+elif [ "$PLATFORM" = "linux_cuda" ]; then
+    echo "Building with CUDA backend..."
+    CMAKE_ARGS="-DGGML_CUDA=on" \
+        uv pip install --no-cache-dir --force-reinstall llama-cpp-python
+else
+    echo "Building with CPU backend..."
     uv pip install --no-cache-dir --force-reinstall llama-cpp-python
+fi
 
 echo ""
 echo "── Verifying installation ──"
@@ -116,15 +149,19 @@ cd "$COMFYUI_DIR"
 uv run python -c "
 import torch
 print(f'ComfyUI PyTorch {torch.__version__}')
-print(f'MPS available: {torch.backends.mps.is_available()}')
-print(f'MPS built:     {torch.backends.mps.is_built()}')
+if hasattr(torch.backends, 'mps'):
+    print(f'MPS available: {torch.backends.mps.is_available()}')
+if torch.cuda.is_available():
+    print(f'CUDA available: {torch.cuda.get_device_name(0)}')
+if not torch.cuda.is_available() and not getattr(torch.backends, 'mps', None):
+    print('Running on CPU')
 "
 cd "$SCRIPT_DIR"
 
 # Verify wrapper server's Python env
 uv run python -c "
 from llama_cpp import Llama
-print('llama-cpp-python imported successfully (Metal support)')
+print('llama-cpp-python imported successfully')
 "
 
 uv run python -c "
