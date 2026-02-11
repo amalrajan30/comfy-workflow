@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3.11-dev \
+        python3.11 python3.11-venv python3.11-dev python3-pip \
         build-essential cmake curl git ca-certificates && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
@@ -35,7 +35,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # System deps
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3.11-dev \
+        python3.11 python3.11-venv python3.11-dev python3-pip \
         build-essential cmake curl git ca-certificates && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
