@@ -1,4 +1,4 @@
-"""Quick test client for the pipeline server."""
+"""Quick test client for the ComfyUI pipeline server."""
 
 import base64
 import json
@@ -17,16 +17,16 @@ def test_full_pipeline(prompt: str = "A photorealistic cat sitting on a wooden d
         ),
         "width": 1024,
         "height": 1024,
-        "num_inference_steps": 9,
+        "num_inference_steps": 4,
         "num_layers": 4,
         "layer_resolution": 640,
-        "layer_steps": 50,
+        "layer_steps": 20,
         "max_tokens": 512,
     }).encode()
 
     req = Request(f"{SERVER}/generate", data=payload, headers={"Content-Type": "application/json"})
     print(f"Sending prompt: {prompt}")
-    print("Running 3-stage pipeline: Z-Image Turbo -> Qwen-Image-Layered -> Qwen2.5-VL ...")
+    print("Running 3-stage pipeline: Z-Image Turbo -> Qwen-Image-Layered -> Qwen2.5-VL (via ComfyUI) ...")
 
     with urlopen(req, timeout=600) as resp:
         data = json.loads(resp.read())

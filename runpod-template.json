@@ -1,9 +1,9 @@
 {
-  "name": "Z-Image Turbo + Qwen Layered GGUF Pipeline",
-  "description": "3-stage pipeline: Z-Image Turbo (image gen) -> Qwen-Image-Layered GGUF (layer decomposition) -> Qwen2.5-VL GGUF (analysis). All Unsloth models.",
-  "dockerImage": "ghcr.io/amalrajan30/comfy-workflow:latest",
+  "name": "ComfyUI: Z-Image Turbo + Qwen-Image-Layered + Qwen2.5-VL GGUF Pipeline",
+  "description": "3-stage ComfyUI pipeline: Z-Image Turbo (image gen) -> Qwen-Image-Layered (layer decomposition via ComfyUI-GGUF) -> Qwen2.5-VL GGUF (analysis via llama-cpp-python CUDA).",
+  "dockerImage": "ghcr.io/amalrajan30/comfy-workflow-comfyui:latest",
   "containerDiskInGb": 30,
-  "volumeInGb": 50,
+  "volumeInGb": 75,
   "volumeMountPath": "/runpod-volume",
   "ports": "8000/http",
   "env": [
@@ -12,8 +12,16 @@
       "value": "/runpod-volume/models"
     },
     {
+      "key": "COMFYUI_MODELS_DIR",
+      "value": "/runpod-volume/comfyui-models"
+    },
+    {
       "key": "HF_TOKEN",
       "value": ""
+    },
+    {
+      "key": "PLATFORM",
+      "value": "runpod_cuda"
     }
   ],
   "minVcpuCount": 4,
@@ -29,5 +37,5 @@
     "NVIDIA H100 PCIe",
     "NVIDIA H100 SXM"
   ],
-  "readme": "## Pipeline Server\n\n### Endpoints\n- `POST /generate` — Full pipeline (text -> image -> layers -> analysis)\n- `POST /generate-image-only` — Z-Image Turbo only\n- `POST /decompose` — Qwen-Image-Layered GGUF only\n- `POST /analyze` — Qwen2.5-VL GGUF only\n- `GET /health` — Check model load status\n\n### Models downloaded on first boot (~19.5 GB, cached on volume)\n- `unsloth/Qwen2.5-VL-7B-Instruct-GGUF` (Q4_K_M + mmproj)\n- `unsloth/Qwen-Image-Layered-GGUF` (Q4_K_M)\n- `Tongyi-MAI/Z-Image-Turbo` (auto-downloaded by diffusers)\n\n### Minimum GPU: 24 GB VRAM (RTX 4090 / A5000 / L40)\n### Recommended: 48+ GB VRAM (A40 / L40S / A100)"
+  "readme": "## ComfyUI Pipeline Server\n\n### Endpoints\n- `POST /generate` — Full pipeline (text -> image -> layers -> analysis)\n- `POST /generate-image-only` — Z-Image Turbo only\n- `POST /decompose` — Qwen-Image-Layered only\n- `POST /analyze` — Qwen2.5-VL GGUF only\n- `GET /health` — Check model load status\n\n### Models downloaded on first boot (~46 GB, cached on volume)\n- `Comfy-Org/z_image_turbo` (diffusion model, text encoder, VAE)\n- `unsloth/Qwen-Image-Layered-GGUF` (Q4_K_M)\n- `Comfy-Org/HunyuanVideo_1.5_repackaged` (Qwen2.5-VL FP8 text encoder)\n- `Comfy-Org/Qwen-Image-Layered_ComfyUI` (VAE)\n- `unsloth/Qwen2.5-VL-7B-Instruct-GGUF` (Q4_K_M + mmproj)\n\n### Minimum GPU: 24 GB VRAM (RTX 4090 / A5000 / L40)\n### Recommended: 48+ GB VRAM (A40 / L40S / A100)"
 }

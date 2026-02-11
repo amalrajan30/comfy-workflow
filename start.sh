@@ -1,64 +1,125 @@
 #!/bin/bash
 set -e
 
-MODEL_DIR="${MODEL_DIR:-/runpod-volume/models}"
-HF_HOME="${HF_HOME:-/runpod-volume/huggingface}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMFYUI_DIR="${COMFYUI_DIR:-${SCRIPT_DIR}/ComfyUI}"
+MODEL_DIR="${MODEL_DIR:-${SCRIPT_DIR}/models}"
+HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export MODEL_DIR HF_HOME
 
-# HF_TOKEN is picked up automatically by huggingface_hub for authenticated downloads
+# MPS environment (must be set before Python/torch imports)
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+
 if [ -n "${HF_TOKEN}" ]; then
     export HF_TOKEN
 fi
 
 echo "============================================"
-echo " Z-Image Turbo + Qwen-Image-Layered GGUF"
-echo " + Qwen2.5-VL GGUF Pipeline Server"
+echo " ComfyUI Pipeline Server"
+echo " Z-Image Turbo + Qwen-Image-Layered"
+echo " + Qwen2.5-VL GGUF"
 echo "============================================"
 echo ""
-echo "MODEL_DIR: ${MODEL_DIR}"
-echo "HF_TOKEN:  ${HF_TOKEN:+set}"
-echo "GPU:       $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'none')"
+echo "COMFYUI_DIR: ${COMFYUI_DIR}"
+echo "MODEL_DIR:   ${MODEL_DIR}"
+echo "HF_TOKEN:    ${HF_TOKEN:+set}"
+echo "Chip:        $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'unknown')"
+echo "Memory:      $(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f GB", $1/1073741824}' || echo 'unknown')"
 echo ""
 
-# ── Download models if not already present ──
-download_if_missing() {
-    local repo="$1"
-    local file="$2"
-    local dest="${MODEL_DIR}/${file}"
+# ── Verify ComfyUI is installed ──
+if [ ! -d "$COMFYUI_DIR" ]; then
+    echo "ERROR: ComfyUI not found at ${COMFYUI_DIR}"
+    echo "       Run ./setup.sh first."
+    exit 1
+fi
 
-    if [ -f "$dest" ]; then
-        echo "[OK] ${file} already exists"
+# ── Check models exist ──
+check_model() {
+    local path="$1"
+    local name="$2"
+    if [ -f "$path" ] || [ -L "$path" ]; then
+        echo "[OK] ${name}"
     else
-        echo "[DL] Downloading ${file} from ${repo} ..."
-        uv run python -c "
-from huggingface_hub import hf_hub_download
-import os
-hf_hub_download(repo_id='${repo}', filename='${file}', local_dir='${MODEL_DIR}', token=os.environ.get('HF_TOKEN'))
-"
-        echo "[OK] ${file} downloaded"
+        echo "[!!] MISSING: ${name}"
+        echo "     Expected at: ${path}"
+        echo "     Run: uv run python download_models.py"
+        MISSING_MODELS=1
     fi
 }
 
-mkdir -p "${MODEL_DIR}/split_files/vae"
-mkdir -p "${HF_HOME}"
+echo "── Checking ComfyUI models ──"
+check_model "${COMFYUI_DIR}/models/diffusion_models/z_image_turbo_bf16.safetensors" "Z-Image Turbo diffusion model"
+check_model "${COMFYUI_DIR}/models/clip/qwen_3_4b.safetensors" "Qwen3-4B text encoder"
+check_model "${COMFYUI_DIR}/models/vae/ae.safetensors" "Flux1 VAE"
+check_model "${COMFYUI_DIR}/models/diffusion_models/qwen-image-layered-Q4_K_M.gguf" "Qwen-Image-Layered GGUF"
+check_model "${COMFYUI_DIR}/models/clip/qwen_2.5_vl_7b_fp8_scaled.safetensors" "Qwen2.5-VL 7B FP8 text encoder"
+check_model "${COMFYUI_DIR}/models/vae/qwen_image_layered_vae.safetensors" "Qwen-Image-Layered VAE"
 
 echo ""
-echo "── Checking models ──"
+echo "── Checking VL GGUF models ──"
+check_model "${MODEL_DIR}/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf" "Qwen2.5-VL-7B GGUF"
+check_model "${MODEL_DIR}/mmproj-BF16.gguf" "Qwen2.5-VL mmproj"
 
-# Qwen2.5-VL GGUF (vision-language analysis)
-download_if_missing "unsloth/Qwen2.5-VL-7B-Instruct-GGUF" "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"
-download_if_missing "unsloth/Qwen2.5-VL-7B-Instruct-GGUF" "mmproj-BF16.gguf"
-
-# Qwen-Image-Layered GGUF (layer decomposition)
-download_if_missing "unsloth/Qwen-Image-Layered-GGUF" "qwen-image-layered-Q4_K_M.gguf"
-
-# Qwen-Image-Layered VAE
-download_if_missing "Comfy-Org/Qwen-Image-Layered_ComfyUI" "split_files/vae/qwen_image_layered_vae.safetensors"
+if [ "${MISSING_MODELS}" = "1" ]; then
+    echo ""
+    echo "Some models are missing. Run: uv run python download_models.py"
+    echo "Then re-run this script."
+    exit 1
+fi
 
 echo ""
-echo "── All models ready ──"
+echo "── Starting ComfyUI backend (port 8188) ──"
+
+# Start ComfyUI in the background
+cd "$COMFYUI_DIR"
+# --listen 127.0.0.1: only accept local connections (wrapper server proxies)
+# --port 8188: default ComfyUI port
+# --force-fp32: safer on Apple Silicon (avoids BF16/FP16 MPS issues)
+uv run python main.py \
+    --listen 127.0.0.1 \
+    --port 8188 \
+    --force-fp32 \
+    &
+COMFYUI_PID=$!
+cd "$SCRIPT_DIR"
+
+echo "ComfyUI started (PID: ${COMFYUI_PID})"
+
+# Cleanup: kill ComfyUI when this script exits
+cleanup() {
+    echo ""
+    echo "Shutting down..."
+    kill $COMFYUI_PID 2>/dev/null || true
+    wait $COMFYUI_PID 2>/dev/null || true
+    echo "ComfyUI stopped."
+}
+trap cleanup EXIT INT TERM
+
+# Wait for ComfyUI to be ready
+echo "Waiting for ComfyUI to be ready..."
+for i in $(seq 1 60); do
+    if curl -s http://127.0.0.1:8188/system_stats >/dev/null 2>&1; then
+        echo "ComfyUI is ready."
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        echo "ERROR: ComfyUI did not start within 60 seconds."
+        exit 1
+    fi
+    sleep 2
+done
+
+echo ""
+echo "── Starting wrapper server (port 8000) ──"
+echo "API endpoints:"
+echo "  POST http://localhost:8000/generate          (full pipeline)"
+echo "  POST http://localhost:8000/generate-image-only"
+echo "  POST http://localhost:8000/decompose"
+echo "  POST http://localhost:8000/analyze"
+echo "  GET  http://localhost:8000/health"
 echo ""
 
-# ── Start the server ──
-echo "Starting server on 0.0.0.0:8000 ..."
+# Start the wrapper server (foreground — keeps the script alive)
 exec uv run python server.py

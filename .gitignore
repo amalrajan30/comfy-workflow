@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# ComfyUI clone (installed at build time)
+ComfyUI/
+
 # Model weights
 models/
 *.gguf
