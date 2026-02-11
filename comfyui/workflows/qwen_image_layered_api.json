@@ -1,0 +1,131 @@
+{
+  "1": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "qwen-image-layered-Q4_K_M.gguf"
+    },
+    "_meta": { "title": "Load Diffusion Model (Qwen-Image-Layered GGUF via ComfyUI-GGUF)" }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "_meta": { "title": "Load CLIP (Qwen2.5-VL 7B FP8)" }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_layered_vae.safetensors"
+    },
+    "_meta": { "title": "Load VAE (Qwen-Image-Layered)" }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.png"
+    },
+    "_meta": { "title": "Load Input Image" }
+  },
+  "5": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["4", 0],
+      "vae": ["3", 0]
+    },
+    "_meta": { "title": "VAE Encode (Reference)" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": ["2", 0]
+    },
+    "_meta": { "title": "CLIP Text Encode (Positive)" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": " ",
+      "clip": ["2", 0]
+    },
+    "_meta": { "title": "CLIP Text Encode (Negative)" }
+  },
+  "8": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": ["6", 0],
+      "latent": ["5", 0]
+    },
+    "_meta": { "title": "Reference Latent (Positive)" }
+  },
+  "9": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": ["7", 0],
+      "latent": ["5", 0]
+    },
+    "_meta": { "title": "Reference Latent (Negative)" }
+  },
+  "10": {
+    "class_type": "EmptyQwenImageLayeredLatentImage",
+    "inputs": {
+      "width": 640,
+      "height": 640,
+      "layers": 4,
+      "batch_size": 1
+    },
+    "_meta": { "title": "Empty Qwen-Image-Layered Latent" }
+  },
+  "11": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "shift": 1,
+      "model": ["1", 0]
+    },
+    "_meta": { "title": "ModelSamplingAuraFlow (shift=1)" }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 20,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["11", 0],
+      "positive": ["8", 0],
+      "negative": ["9", 0],
+      "latent_image": ["10", 0]
+    },
+    "_meta": { "title": "KSampler" }
+  },
+  "13": {
+    "class_type": "LatentCutToBatch",
+    "inputs": {
+      "dim": "t",
+      "slice_size": 1,
+      "samples": ["12", 0]
+    },
+    "_meta": { "title": "Latent Cut To Batch (split layers)" }
+  },
+  "14": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["13", 0],
+      "vae": ["3", 0]
+    },
+    "_meta": { "title": "VAE Decode (layers)" }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "layers",
+      "images": ["14", 0]
+    },
+    "_meta": { "title": "Save Layer Images" }
+  }
+}

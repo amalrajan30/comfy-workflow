@@ -1,0 +1,11 @@
+.git
+.venv
+ComfyUI/
+models/
+__pycache__
+*.pyc
+*.safetensors
+*.gguf
+setup.sh
+start.sh
+README.md
