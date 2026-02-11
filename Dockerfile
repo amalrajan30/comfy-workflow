@@ -60,7 +60,7 @@ RUN cd /comfyui/custom_nodes && \
 WORKDIR /app
 
 # Copy lockfile first for layer caching
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock ./
 
 # Install wrapper server deps
 RUN uv sync --frozen --no-dev
