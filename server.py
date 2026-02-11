@@ -83,7 +83,7 @@ def _load_layered():
     """
     global layered_pipe
     from diffusers import QwenImageLayeredPipeline, GGUFQuantizationConfig
-    from diffusers.models import AutoencoderKLWan, QwenImageTransformer2DModel
+    from diffusers.models import AutoencoderKLQwenImage, QwenImageTransformer2DModel
 
     if not os.path.exists(LAYERED_GGUF):
         raise FileNotFoundError(
@@ -97,6 +97,8 @@ def _load_layered():
     log.info("Loading Qwen-Image-Layered GGUF transformer from %s ...", LAYERED_GGUF)
     transformer = QwenImageTransformer2DModel.from_single_file(
         LAYERED_GGUF,
+        config=LAYERED_BASE_REPO,
+        subfolder="transformer",
         quantization_config=GGUFQuantizationConfig(compute_dtype=dtype),
         torch_dtype=dtype,
     )
@@ -111,11 +113,15 @@ def _load_layered():
         "torch_dtype": dtype,
     }
 
-    # Use local VAE if downloaded
-    if os.path.exists(LAYERED_VAE):
-        log.info("Using local VAE from %s", LAYERED_VAE)
-        vae = AutoencoderKLWan.from_single_file(LAYERED_VAE, torch_dtype=dtype)
-        pipe_kwargs["vae"] = vae
+    # Load the 4-channel RGBA VAE from the base repo
+    # (AutoencoderKLQwenImage doesn't support from_single_file, so use from_pretrained)
+    log.info("Loading VAE from %s (subfolder=vae) ...", LAYERED_BASE_REPO)
+    vae = AutoencoderKLQwenImage.from_pretrained(
+        LAYERED_BASE_REPO,
+        subfolder="vae",
+        torch_dtype=dtype,
+    )
+    pipe_kwargs["vae"] = vae
 
     layered_pipe = QwenImageLayeredPipeline.from_pretrained(
         LAYERED_BASE_REPO,
