@@ -2,7 +2,7 @@
 set -e
 
 # ── ComfyUI Pipeline Setup Script ──
-# One-time setup: installs ComfyUI, dependencies, and llama-cpp-python.
+# One-time setup: installs ComfyUI and dependencies.
 # Supports Apple Silicon (MPS/Metal) and Linux (CUDA).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +11,6 @@ COMFYUI_DIR="${COMFYUI_DIR:-${SCRIPT_DIR}/ComfyUI}"
 echo "============================================"
 echo " ComfyUI Pipeline Setup"
 echo " Z-Image Turbo + Qwen-Image-Layered"
-echo " + Qwen2.5-VL GGUF"
 echo "============================================"
 echo ""
 
@@ -125,23 +124,6 @@ cd "$SCRIPT_DIR"
 uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
 
 echo ""
-echo "── Installing llama-cpp-python ──"
-
-# llama-cpp-python for Stage 3 (Qwen2.5-VL GGUF)
-if [ "$PLATFORM" = "apple_silicon" ]; then
-    echo "Building with Metal backend..."
-    CMAKE_ARGS="-DGGML_METAL=on -DCMAKE_OSX_ARCHITECTURES=arm64" \
-        uv pip install --no-cache-dir --force-reinstall llama-cpp-python
-elif [ "$PLATFORM" = "linux_cuda" ]; then
-    echo "Building with CUDA backend..."
-    CMAKE_ARGS="-DGGML_CUDA=on" \
-        uv pip install --no-cache-dir --force-reinstall llama-cpp-python
-else
-    echo "Building with CPU backend..."
-    uv pip install --no-cache-dir --force-reinstall llama-cpp-python
-fi
-
-echo ""
 echo "── Verifying installation ──"
 
 # Verify ComfyUI's Python env
@@ -159,11 +141,6 @@ if not torch.cuda.is_available() and not getattr(torch.backends, 'mps', None):
 cd "$SCRIPT_DIR"
 
 # Verify wrapper server's Python env
-uv run python -c "
-from llama_cpp import Llama
-print('llama-cpp-python imported successfully')
-"
-
 uv run python -c "
 import requests, fastapi, uvicorn
 print(f'FastAPI {fastapi.__version__}, uvicorn {uvicorn.__version__}')

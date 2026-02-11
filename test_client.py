@@ -11,22 +11,17 @@ SERVER = "http://localhost:8000"
 def test_full_pipeline(prompt: str = "A photorealistic cat sitting on a wooden desk next to a coffee mug"):
     payload = json.dumps({
         "prompt": prompt,
-        "analysis_prompt": (
-            "Analyze this image and its decomposed layers. Describe the composition, "
-            "colors, subjects, mood, and how the layers separate the visual elements."
-        ),
         "width": 1024,
         "height": 1024,
         "num_inference_steps": 4,
         "num_layers": 4,
         "layer_resolution": 640,
         "layer_steps": 20,
-        "max_tokens": 512,
     }).encode()
 
     req = Request(f"{SERVER}/generate", data=payload, headers={"Content-Type": "application/json"})
     print(f"Sending prompt: {prompt}")
-    print("Running 3-stage pipeline: Z-Image Turbo -> Qwen-Image-Layered -> Qwen2.5-VL (via ComfyUI) ...")
+    print("Running 2-stage pipeline: Z-Image Turbo -> Qwen-Image-Layered (via ComfyUI) ...")
 
     with urlopen(req, timeout=600) as resp:
         data = json.loads(resp.read())
@@ -45,9 +40,7 @@ def test_full_pipeline(prompt: str = "A photorealistic cat sitting on a wooden d
             f.write(layer_bytes)
         print(f"Layer {i + 1} saved to {filename}")
 
-    # Print the analysis
-    print(f"\n--- Qwen2.5-VL Analysis ({data['num_layers']} layers) ---")
-    print(data["analysis"])
+    print(f"\nDone! Generated image + {data['num_layers']} layers.")
 
 
 def test_health():

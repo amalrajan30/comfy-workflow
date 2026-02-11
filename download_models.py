@@ -3,8 +3,6 @@
 Downloads all required models from HuggingFace:
   - qwen-image-layered-Q4_K_M.gguf     -> ComfyUI/models/diffusion_models/ (via ComfyUI-GGUF)
   - qwen_image_layered_vae.safetensors  -> ComfyUI/models/vae/
-  - Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf -> models/ (stage 3)
-  - mmproj-BF16.gguf                    -> models/ (stage 3)
   - z_image_turbo_bf16.safetensors      (~12 GB, Z-Image Turbo diffusion model)
   - qwen_3_4b.safetensors              (~8 GB,  Z-Image text encoder)
   - ae.safetensors                      (~335 MB, Flux1 VAE)
@@ -16,7 +14,6 @@ from huggingface_hub import hf_hub_download
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COMFYUI_DIR = os.environ.get("COMFYUI_DIR", os.path.join(SCRIPT_DIR, "ComfyUI"))
-MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(SCRIPT_DIR, "models"))
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 
@@ -53,13 +50,12 @@ def download_all():
     os.makedirs(diffusion_dir, exist_ok=True)
     os.makedirs(clip_dir, exist_ok=True)
     os.makedirs(vae_dir, exist_ok=True)
-    os.makedirs(MODEL_DIR, exist_ok=True)
 
     # ──────────────────────────────────────────────────────────────
     # Qwen-Image-Layered models
     # ──────────────────────────────────────────────────────────────
 
-    print("[1/8] Qwen-Image-Layered GGUF diffusion model (~12 GB)")
+    print("[1/6] Qwen-Image-Layered GGUF diffusion model (~12 GB)")
     _hf_download_and_link(
         "unsloth/Qwen-Image-Layered-GGUF",
         "qwen-image-layered-Q4_K_M.gguf",
@@ -68,7 +64,7 @@ def download_all():
         "qwen-image-layered-Q4_K_M.gguf",
     )
 
-    print("[2/8] Qwen-Image-Layered VAE (~242 MB)")
+    print("[2/6] Qwen-Image-Layered VAE (~242 MB)")
     _hf_download_and_link(
         "Comfy-Org/Qwen-Image-Layered_ComfyUI",
         "split_files/vae/qwen_image_layered_vae.safetensors",
@@ -78,34 +74,12 @@ def download_all():
     )
 
     # ──────────────────────────────────────────────────────────────
-    # Qwen2.5-VL GGUF models
-    # ──────────────────────────────────────────────────────────────
-
-    print("[3/8] Qwen2.5-VL-7B GGUF (~4.7 GB)")
-    _hf_download_and_link(
-        "unsloth/Qwen2.5-VL-7B-Instruct-GGUF",
-        "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-        MODEL_DIR,
-        os.path.join(MODEL_DIR, "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"),
-        "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-    )
-
-    print("[4/8] Qwen2.5-VL mmproj (~1.35 GB)")
-    _hf_download_and_link(
-        "unsloth/Qwen2.5-VL-7B-Instruct-GGUF",
-        "mmproj-BF16.gguf",
-        MODEL_DIR,
-        os.path.join(MODEL_DIR, "mmproj-BF16.gguf"),
-        "mmproj-BF16.gguf",
-    )
-
-    # ──────────────────────────────────────────────────────────────
     # Z-Image Turbo models (ComfyUI-specific format)
     # ──────────────────────────────────────────────────────────────
 
     zimage_repo = "Comfy-Org/z_image_turbo"
 
-    print("[5/8] Z-Image Turbo diffusion model (~12 GB)")
+    print("[3/6] Z-Image Turbo diffusion model (~12 GB)")
     _hf_download_and_link(
         zimage_repo,
         "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
@@ -114,7 +88,7 @@ def download_all():
         "z_image_turbo_bf16.safetensors",
     )
 
-    print("[6/8] Qwen3-4B text encoder (~8 GB)")
+    print("[4/6] Qwen3-4B text encoder (~8 GB)")
     _hf_download_and_link(
         zimage_repo,
         "split_files/text_encoders/qwen_3_4b.safetensors",
@@ -123,7 +97,7 @@ def download_all():
         "qwen_3_4b.safetensors",
     )
 
-    print("[7/8] Flux1 VAE (~335 MB)")
+    print("[5/6] Flux1 VAE (~335 MB)")
     _hf_download_and_link(
         zimage_repo,
         "split_files/vae/ae.safetensors",
@@ -136,7 +110,7 @@ def download_all():
     # Qwen-Image-Layered text encoder
     # ──────────────────────────────────────────────────────────────
 
-    print("[8/8] Qwen2.5-VL 7B FP8 text encoder (~7.5 GB)")
+    print("[6/6] Qwen2.5-VL 7B FP8 text encoder (~7.5 GB)")
     _hf_download_and_link(
         "Comfy-Org/HunyuanVideo_1.5_repackaged",
         "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
@@ -146,9 +120,8 @@ def download_all():
     )
 
     # ── Summary ──
-    print(f"\nDone! All 8 models downloaded.")
+    print(f"\nDone! All 6 models downloaded.")
     print(f"  ComfyUI models: {COMFYUI_DIR}/models/")
-    print(f"  VL GGUF models: {MODEL_DIR}/")
 
 
 if __name__ == "__main__":

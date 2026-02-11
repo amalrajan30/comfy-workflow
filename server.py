@@ -2,14 +2,12 @@
 ComfyUI-based pipeline server:
   Z-Image Turbo (via ComfyUI)
     -> Qwen-Image-Layered (via ComfyUI)
-    -> Qwen2.5-VL GGUF (via llama-cpp-python)
     -> response
 
 Architecture:
   - ComfyUI runs on port 8188 as the backend for image generation and layer decomposition.
   - This server runs on port 8000 and provides the REST API.
   - Stage 1 (Z-Image Turbo) and Stage 2 (Qwen-Image-Layered) are submitted as ComfyUI workflows.
-  - Stage 3 (Qwen2.5-VL analysis) runs directly via llama-cpp-python with Metal GPU.
 
 Models:
   ComfyUI (stages 1 & 2):
@@ -19,9 +17,6 @@ Models:
     - qwen-image-layered-Q4_K_M.gguf          (unsloth GGUF, loaded via ComfyUI-GGUF)
     - qwen_2.5_vl_7b_fp8_scaled.safetensors   (text encoder for Qwen-Image-Layered)
     - qwen_image_layered_vae.safetensors       (VAE for Qwen-Image-Layered)
-  Direct GGUF (stage 3):
-    - Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf     (unsloth/Qwen2.5-VL-7B-Instruct-GGUF)
-    - mmproj-BF16.gguf                         (vision projector)
 """
 
 import base64
@@ -33,7 +28,6 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional
 
 import requests
@@ -49,11 +43,6 @@ from pydantic import BaseModel, Field
 
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 WORKFLOW_DIR = os.path.join(os.path.dirname(__file__), "workflows")
-MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "models"))
-
-# Qwen2.5-VL GGUF paths (stage 3 — direct llama-cpp-python)
-QWEN_VL_GGUF = os.path.join(MODEL_DIR, "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf")
-QWEN_VL_MMPROJ = os.path.join(MODEL_DIR, "mmproj-BF16.gguf")
 
 # ComfyUI timeout for workflow execution (seconds)
 COMFYUI_TIMEOUT = int(os.environ.get("COMFYUI_TIMEOUT", "600"))
@@ -65,7 +54,6 @@ log = logging.getLogger(__name__)
 # Global state
 # ---------------------------------------------------------------------------
 
-qwen_llm = None
 client_id = str(uuid.uuid4())
 
 # Cached workflow templates (loaded once at startup)
@@ -241,42 +229,6 @@ def stage_layered(
     return layers
 
 
-def stage_analyze(
-    original: Image.Image,
-    layers: list[Image.Image],
-    user_prompt: str,
-    max_tokens: int,
-) -> str:
-    """Stage 3: Qwen2.5-VL GGUF (Unsloth) — analyze the original image and its layers."""
-    content = [
-        {"type": "image_url", "image_url": {"url": _pil_to_data_uri(original)}},
-        {"type": "text", "text": f"[Original image above] The image was decomposed into {len(layers)} RGBA layers:"},
-    ]
-    for i, layer in enumerate(layers):
-        content.append({"type": "image_url", "image_url": {"url": _pil_to_data_uri(layer)}})
-        content.append({"type": "text", "text": f"[Layer {i + 1} of {len(layers)}]"})
-
-    content.append({"type": "text", "text": user_prompt})
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert image analyst. You receive an original image and its "
-                "RGBA layer decomposition. Provide a detailed, structured analysis."
-            ),
-        },
-        {"role": "user", "content": content},
-    ]
-
-    response = qwen_llm.create_chat_completion(
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=0.3,
-    )
-    return response["choices"][0]["message"]["content"]
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -285,11 +237,6 @@ def _pil_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
     buf = io.BytesIO()
     img.save(buf, format=fmt)
     return base64.b64encode(buf.getvalue()).decode()
-
-
-def _pil_to_data_uri(img: Image.Image) -> str:
-    b64 = _pil_to_base64(img)
-    return f"data:image/png;base64,{b64}"
 
 
 # ---------------------------------------------------------------------------
@@ -313,43 +260,6 @@ def _wait_for_comfyui(timeout: int = 120):
     raise RuntimeError(f"ComfyUI not reachable at {COMFYUI_URL} after {timeout}s")
 
 
-def _load_qwen_vl():
-    """Load Qwen2.5-VL GGUF via llama-cpp-python with Metal support."""
-    global qwen_llm
-    from llama_cpp import Llama
-
-    try:
-        from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-        handler_cls = Qwen25VLChatHandler
-        log.info("Using Qwen25VLChatHandler")
-    except ImportError:
-        from llama_cpp.llama_chat_format import Llava15ChatHandler
-        handler_cls = Llava15ChatHandler
-        log.warning("Qwen25VLChatHandler not found, falling back to Llava15ChatHandler")
-
-    if not os.path.exists(QWEN_VL_GGUF):
-        raise FileNotFoundError(
-            f"GGUF model not found at {QWEN_VL_GGUF}. "
-            "Run `python download_models.py` first."
-        )
-    if not os.path.exists(QWEN_VL_MMPROJ):
-        raise FileNotFoundError(
-            f"mmproj file not found at {QWEN_VL_MMPROJ}. "
-            "Run `python download_models.py` first."
-        )
-
-    _gpu_label = "CUDA GPU" if os.environ.get("PLATFORM") == "runpod_cuda" else "Metal GPU"
-    log.info("Loading Qwen2.5-VL GGUF from %s (%s) ...", QWEN_VL_GGUF, _gpu_label)
-    chat_handler = handler_cls(clip_model_path=QWEN_VL_MMPROJ)
-    qwen_llm = Llama(
-        model_path=QWEN_VL_GGUF,
-        chat_handler=chat_handler,
-        n_ctx=4096,
-        n_gpu_layers=-1,
-    )
-    log.info("Qwen2.5-VL GGUF loaded (%s acceleration)", _gpu_label)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _wf_zimage, _wf_layered
@@ -362,9 +272,6 @@ async def lifespan(app: FastAPI):
     # Wait for ComfyUI backend
     _wait_for_comfyui()
 
-    # Load Qwen2.5-VL for analysis (stage 3)
-    _load_qwen_vl()
-
     yield
 
 
@@ -375,10 +282,10 @@ async def lifespan(app: FastAPI):
 _PLATFORM = os.environ.get("PLATFORM", "apple_silicon")
 
 app = FastAPI(
-    title="Z-Image Turbo + Qwen-Image-Layered + Qwen2.5-VL GGUF Pipeline (ComfyUI)",
+    title="Z-Image Turbo + Qwen-Image-Layered Pipeline (ComfyUI)",
     description=(
-        "Generate images with Z-Image Turbo (via ComfyUI), decompose into RGBA layers "
-        "with Qwen-Image-Layered (via ComfyUI), then analyze with Qwen2.5-VL GGUF. "
+        "Generate images with Z-Image Turbo (via ComfyUI) and decompose into RGBA layers "
+        "with Qwen-Image-Layered (via ComfyUI). "
         + (
             "Running on RunPod with NVIDIA CUDA GPU."
             if _PLATFORM == "runpod_cuda"
@@ -395,13 +302,6 @@ app = FastAPI(
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., description="Text prompt for image generation")
-    analysis_prompt: str = Field(
-        default=(
-            "Analyze this image and its decomposed layers. Describe the composition, "
-            "colors, subjects, mood, and how the layers separate the visual elements."
-        ),
-        description="Prompt to send to Qwen2.5-VL for analyzing the image",
-    )
     width: int = Field(default=1024, ge=256, le=2048)
     height: int = Field(default=1024, ge=256, le=2048)
     num_inference_steps: int = Field(
@@ -412,13 +312,11 @@ class GenerateRequest(BaseModel):
     num_layers: int = Field(default=4, ge=1, le=10, description="Number of RGBA layers to decompose into")
     layer_resolution: int = Field(default=640, description="Max dimension for layer decomposition (640 or 1024)")
     layer_steps: int = Field(default=20, ge=10, le=100, description="Inference steps for Qwen-Image-Layered")
-    max_tokens: int = Field(default=512, ge=64, le=2048, description="Max tokens for Qwen2.5-VL analysis")
 
 
 class GenerateResponse(BaseModel):
     image_base64: str
     layers_base64: list[str]
-    analysis: str
     generation_prompt: str
     seed_used: int
     num_layers: int
@@ -430,7 +328,7 @@ class GenerateResponse(BaseModel):
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(req: GenerateRequest):
-    """Full pipeline: Z-Image Turbo -> Qwen-Image-Layered -> Qwen2.5-VL GGUF -> response."""
+    """Full pipeline: Z-Image Turbo -> Qwen-Image-Layered -> response."""
     try:
         # Stage 1: Generate image with Z-Image Turbo (via ComfyUI)
         log.info("Stage 1: Generating image for prompt: %s", req.prompt[:80])
@@ -454,15 +352,9 @@ async def generate(req: GenerateRequest):
         )
         log.info("Stage 2 complete (%d layers)", len(layers))
 
-        # Stage 3: Analyze with Qwen2.5-VL GGUF
-        log.info("Stage 3: Analyzing with Qwen2.5-VL GGUF ...")
-        analysis = stage_analyze(image, layers, req.analysis_prompt, req.max_tokens)
-        log.info("Stage 3 complete (%d chars)", len(analysis))
-
         return GenerateResponse(
             image_base64=_pil_to_base64(image),
             layers_base64=[_pil_to_base64(layer) for layer in layers],
-            analysis=analysis,
             generation_prompt=req.prompt,
             seed_used=seed_used,
             num_layers=len(layers),
@@ -515,23 +407,6 @@ async def decompose(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/analyze")
-async def analyze(
-    image_base64: str,
-    analysis_prompt: str = "Describe this image in detail.",
-    max_tokens: int = 512,
-):
-    """Stage 3 only: Analyze an image with Qwen2.5-VL GGUF."""
-    try:
-        img_bytes = base64.b64decode(image_base64)
-        image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        analysis = stage_analyze(image, [], analysis_prompt, max_tokens)
-        return JSONResponse({"analysis": analysis})
-    except Exception as e:
-        log.exception("Analysis error")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/health")
 async def health():
     comfyui_ok = False
@@ -542,10 +417,9 @@ async def health():
         pass
 
     return {
-        "status": "ok" if comfyui_ok and qwen_llm is not None else "degraded",
+        "status": "ok" if comfyui_ok else "degraded",
         "comfyui_url": COMFYUI_URL,
         "comfyui_reachable": comfyui_ok,
-        "qwen_vl_loaded": qwen_llm is not None,
         "backend": "comfyui",
         "platform": os.environ.get("PLATFORM", "apple_silicon"),
     }

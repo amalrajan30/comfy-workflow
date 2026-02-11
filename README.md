@@ -1,6 +1,6 @@
 # Pipeline Server — ComfyUI
 
-Z-Image Turbo + Qwen-Image-Layered GGUF + Qwen2.5-VL GGUF pipeline, using ComfyUI as the image generation backend. Optimized for Apple Silicon Macs (M1/M2/M3/M4).
+Z-Image Turbo + Qwen-Image-Layered GGUF pipeline, using ComfyUI as the image generation backend. Optimized for Apple Silicon Macs (M1/M2/M3/M4).
 
 ## Architecture
 
@@ -10,13 +10,11 @@ Z-Image Turbo + Qwen-Image-Layered GGUF + Qwen2.5-VL GGUF pipeline, using ComfyU
 │                                                         │
 │  Stage 1: Z-Image Turbo ──────────┐                    │
 │  Stage 2: Qwen-Image-Layered ─────┼──► ComfyUI :8188   │
-│  Stage 3: Qwen2.5-VL GGUF ───────────► llama-cpp-python│
 └─────────────────────────────────────────────────────────┘
 ```
 
 - **Stages 1 & 2** are submitted as ComfyUI workflow_api.json to the ComfyUI backend
 - **Stage 2** uses a GGUF model loaded via ComfyUI-GGUF custom node
-- **Stage 3** runs Qwen2.5-VL GGUF directly via llama-cpp-python (Metal GPU)
 
 ## Requirements
 
@@ -29,7 +27,7 @@ Z-Image Turbo + Qwen-Image-Layered GGUF + Qwen2.5-VL GGUF pipeline, using ComfyU
 ## Quick Start
 
 ```bash
-# 1. One-time setup (installs ComfyUI + ComfyUI-GGUF + deps + llama-cpp-python with Metal)
+# 1. One-time setup (installs ComfyUI + ComfyUI-GGUF + deps)
 chmod +x setup.sh start.sh
 ./setup.sh
 
@@ -49,8 +47,6 @@ All models are downloaded from HuggingFace by `download_models.py`:
 |---|---|---|
 | `qwen-image-layered-Q4_K_M.gguf` | 12 GB | ComfyUI diffusion model (via ComfyUI-GGUF) |
 | `qwen_image_layered_vae.safetensors` | 242 MB | ComfyUI VAE |
-| `Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf` | 4.4 GB | Stage 3 VL analysis |
-| `mmproj-BF16.gguf` | 1.3 GB | Stage 3 mmproj |
 | `z_image_turbo_bf16.safetensors` | ~12 GB | Z-Image Turbo diffusion |
 | `qwen_3_4b.safetensors` | ~8 GB | Z-Image text encoder |
 | `ae.safetensors` | ~335 MB | Flux1 VAE |
@@ -58,11 +54,10 @@ All models are downloaded from HuggingFace by `download_models.py`:
 
 ## Endpoints
 
-- `POST /generate` — Full pipeline (text -> image -> layers -> analysis)
+- `POST /generate` — Full pipeline (text -> image -> layers)
 - `POST /generate-image-only` — Z-Image Turbo only
 - `POST /decompose` — Qwen-Image-Layered only
-- `POST /analyze` — Qwen2.5-VL GGUF only
-- `GET /health` — Check ComfyUI + model status
+- `GET /health` — Check ComfyUI status
 
 ## Workflow Customization
 

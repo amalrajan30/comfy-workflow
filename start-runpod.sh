@@ -2,10 +2,9 @@
 set -e
 
 COMFYUI_DIR="${COMFYUI_DIR:-/comfyui}"
-MODEL_DIR="${MODEL_DIR:-/runpod-volume/models}"
 COMFYUI_MODELS_DIR="${COMFYUI_MODELS_DIR:-/runpod-volume/comfyui-models}"
 HF_HOME="${HF_HOME:-/runpod-volume/huggingface}"
-export MODEL_DIR HF_HOME
+export HF_HOME
 
 if [ -n "${HF_TOKEN}" ]; then
     export HF_TOKEN
@@ -14,11 +13,9 @@ fi
 echo "============================================"
 echo " ComfyUI Pipeline Server (RunPod CUDA)"
 echo " Z-Image Turbo + Qwen-Image-Layered"
-echo " + Qwen2.5-VL GGUF"
 echo "============================================"
 echo ""
 echo "COMFYUI_DIR:       ${COMFYUI_DIR}"
-echo "MODEL_DIR:         ${MODEL_DIR}"
 echo "COMFYUI_MODELS_DIR: ${COMFYUI_MODELS_DIR}"
 echo "HF_TOKEN:          ${HF_TOKEN:+set}"
 echo ""
@@ -53,7 +50,6 @@ shutil.copy2(path, '${dest}')
 mkdir -p "${COMFYUI_MODELS_DIR}/diffusion_models"
 mkdir -p "${COMFYUI_MODELS_DIR}/clip"
 mkdir -p "${COMFYUI_MODELS_DIR}/vae"
-mkdir -p "${MODEL_DIR}"
 mkdir -p "${HF_HOME}"
 
 echo ""
@@ -96,21 +92,6 @@ download_if_missing \
     "split_files/vae/qwen_image_layered_vae.safetensors" \
     "${COMFYUI_MODELS_DIR}/vae" \
     "qwen_image_layered_vae.safetensors"
-
-echo ""
-echo "── Checking VL GGUF models (stage 3) ──"
-
-download_if_missing \
-    "unsloth/Qwen2.5-VL-7B-Instruct-GGUF" \
-    "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf" \
-    "${MODEL_DIR}" \
-    "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"
-
-download_if_missing \
-    "unsloth/Qwen2.5-VL-7B-Instruct-GGUF" \
-    "mmproj-BF16.gguf" \
-    "${MODEL_DIR}" \
-    "mmproj-BF16.gguf"
 
 echo ""
 echo "── All models ready ──"
@@ -168,7 +149,6 @@ echo "API endpoints:"
 echo "  POST http://localhost:8000/generate          (full pipeline)"
 echo "  POST http://localhost:8000/generate-image-only"
 echo "  POST http://localhost:8000/decompose"
-echo "  POST http://localhost:8000/analyze"
 echo "  GET  http://localhost:8000/health"
 echo ""
 

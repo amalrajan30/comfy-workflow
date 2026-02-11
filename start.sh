@@ -3,9 +3,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMFYUI_DIR="${COMFYUI_DIR:-${SCRIPT_DIR}/ComfyUI}"
-MODEL_DIR="${MODEL_DIR:-${SCRIPT_DIR}/models}"
 HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
-export MODEL_DIR HF_HOME
+export HF_HOME
 
 # MPS environment (must be set before Python/torch imports)
 export PYTORCH_ENABLE_MPS_FALLBACK=1
@@ -18,11 +17,9 @@ fi
 echo "============================================"
 echo " ComfyUI Pipeline Server"
 echo " Z-Image Turbo + Qwen-Image-Layered"
-echo " + Qwen2.5-VL GGUF"
 echo "============================================"
 echo ""
 echo "COMFYUI_DIR: ${COMFYUI_DIR}"
-echo "MODEL_DIR:   ${MODEL_DIR}"
 echo "HF_TOKEN:    ${HF_TOKEN:+set}"
 echo "Chip:        $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'unknown')"
 echo "Memory:      $(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f GB", $1/1073741824}' || echo 'unknown')"
@@ -56,11 +53,6 @@ check_model "${COMFYUI_DIR}/models/vae/ae.safetensors" "Flux1 VAE"
 check_model "${COMFYUI_DIR}/models/diffusion_models/qwen-image-layered-Q4_K_M.gguf" "Qwen-Image-Layered GGUF"
 check_model "${COMFYUI_DIR}/models/clip/qwen_2.5_vl_7b_fp8_scaled.safetensors" "Qwen2.5-VL 7B FP8 text encoder"
 check_model "${COMFYUI_DIR}/models/vae/qwen_image_layered_vae.safetensors" "Qwen-Image-Layered VAE"
-
-echo ""
-echo "── Checking VL GGUF models ──"
-check_model "${MODEL_DIR}/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf" "Qwen2.5-VL-7B GGUF"
-check_model "${MODEL_DIR}/mmproj-BF16.gguf" "Qwen2.5-VL mmproj"
 
 if [ "${MISSING_MODELS}" = "1" ]; then
     echo ""
@@ -117,7 +109,6 @@ echo "API endpoints:"
 echo "  POST http://localhost:8000/generate          (full pipeline)"
 echo "  POST http://localhost:8000/generate-image-only"
 echo "  POST http://localhost:8000/decompose"
-echo "  POST http://localhost:8000/analyze"
 echo "  GET  http://localhost:8000/health"
 echo ""
 
