@@ -30,17 +30,17 @@ download_if_missing() {
     local dest_name="$4"
     local dest="${dest_dir}/${dest_name}"
 
-    if [ -f "$dest" ]; then
+    if [ -f "$dest" ] || [ -L "$dest" ]; then
         echo "[OK] ${dest_name} already exists"
     else
         echo "[DL] Downloading ${dest_name} from ${repo} ..."
         mkdir -p "${dest_dir}"
         uv run python -c "
 from huggingface_hub import hf_hub_download
-import os, shutil
+import os
 path = hf_hub_download(repo_id='${repo}', filename='${hf_filename}', token=os.environ.get('HF_TOKEN'))
 os.makedirs('${dest_dir}', exist_ok=True)
-shutil.copy2(path, '${dest}')
+os.symlink(path, '${dest}')
 "
         echo "[OK] ${dest_name} downloaded"
     fi
